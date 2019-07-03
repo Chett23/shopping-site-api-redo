@@ -6,7 +6,7 @@ const jwt = require('jsonwebtoken');
 const monk = require('monk');
 const headers = require('./headers');
 
-const port = process.env.PORT || 5000
+const port = process.env.PORT || 8080
 const url = process.env.DB_URL || 'mongodb://admin:admin@chesterfirstdb-shard-00-00-i7cmi.mongodb.net:27017,chesterfirstdb-shard-00-01-i7cmi.mongodb.net:27017,chesterfirstdb-shard-00-02-i7cmi.mongodb.net:27017/Shopping-siteDB?ssl=true&replicaSet=ChesterFirstDB-shard-0&authSource=admin&retryWrites=true'
 const db = monk(url);
 db.then(() => {
@@ -14,6 +14,7 @@ db.then(() => {
 })
 const items = db.get('Items');
 const cart = db.get('Cart');
+const users = db.get('Users');
 const secret = 'shh. dont tell im a secret';
 
 app.use(headers)
@@ -30,17 +31,17 @@ app.get('/items', (req, res) => {
     .catch((err) => { res.send(err) })
 })
 
-app.post('/items', (req, res) => {  
-if (req.body._id) {
-  items.findOneAndUpdate(req.body._id, req.body).then(result => res.send(result))
-} else {
-  items.insert(req.body).then(result => res.send(result))
-}
+app.post('/items', (req, res) => {
+  if (req.body._id) {
+    items.findOneAndUpdate(req.body._id, req.body).then(result => res.send(result))
+  } else {
+    items.insert(req.body).then(result => res.send(result))
+  }
 })
 
 app.delete('/items/:id', (req, res) => {
   items.findOneAndDelete(req.params.id)
-  .then(result => res.send(result))
+    .then(result => res.send(result))
 })
 
 app.get('/cart', (req, res) => {
@@ -48,17 +49,33 @@ app.get('/cart', (req, res) => {
 })
 
 app.post('/cart', (req, res) => {
+  //managing qty in stock
+  items.findOne(req.body._id)
+    .then(item => {
+      if (item.stock <= 0) {
+        res.send(`Were sorry, but ${item.name} is no longer in stock`)
+      } else {
+        let item = req.body
+        item.stock = item.stock - 1
+        items.findOneAndUpdate(req.body._id, item)
+      }
+    })
+  //adding item to cart and managing qty in cart
   cart.findOne(req.body._id)
     .then((item) => {
       if (item === null) {
         req.body.qty = 1
+        req.body.stock--
         cart.insert(req.body)
       } else {
         let tempQty = item.qty + 1
-        cart.update({ _id: req.body._id }, { $set: { qty: tempQty } })
+        let tempStock = item.stock - 1
+        cart.update({ _id: req.body._id }, { $set: { qty: tempQty, stock: tempStock } })
       }
     }).then(result => {
       res.send(result)
+    }).catch(err => {
+      res.send(err)
     })
 })
 
@@ -75,6 +92,64 @@ app.delete('/cart/:_id', (req, res) => {
       res.send(result)
     });
 });
+
+app.get('/users', (req, res) => {
+  users.find({}).then(users => { res.send(users) })
+})
+
+app.post('/login', (req, res) => {
+  users.findOne({username: req.body.username})
+    .then(user => {
+      let { password, ...userRed } = user
+      if (req.body.password === password) {
+        res.send(userRed)
+      } else {
+        res.send(401, 'No valid User')
+      }
+    })
+    .catch(err => {
+      res.send('err')
+    })
+})
+
+app.post('/login/create', (req, res) => {
+  if (req.body._id) {
+    users.findOneAndUpdate(req.body._id, req.body)
+    .then(user => {
+      let { password, ...userRed } = user
+      res.send(userRed)
+    })
+  } else {
+    users.insert(req.body)
+    .then(user => {
+      let { password, ...userRed } = user
+      res.send(userRed)
+    })
+  }
+})
+
+app.post('/login/users/password-reset', (req, res) => {
+  users.findOne({username: req.body.username})
+    .then(user => {
+      if (user.username === "Admin") {res.send(401, "Cannot change root admin password")}
+      let tempUser = user
+      tempUser.password = req.body.password
+      users.findOneAndUpdate(user._id, tempUser)
+        .then(user => {
+          let { password, ...userRed } = user
+          res.send(userRed)
+        })
+    })
+})
+
+app.delete('/users/:_id', (req, res) => {
+  users.findOneAndDelete(req.params._id)
+    .then(result => {
+      res.send(result)
+    })
+});
+
+
 
 app.listen(port, (err) => {
   if (err) { throw err }
