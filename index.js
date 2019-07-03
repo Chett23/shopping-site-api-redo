@@ -7,7 +7,7 @@ const monk = require('monk');
 const headers = require('./headers');
 
 const port = process.env.PORT || 8080
-const url = process.env.DB_URL || 'mongodb://admin:admin@chesterfirstdb-shard-00-00-i7cmi.mongodb.net:27017,chesterfirstdb-shard-00-01-i7cmi.mongodb.net:27017,chesterfirstdb-shard-00-02-i7cmi.mongodb.net:27017/Shopping-siteDB?ssl=true&replicaSet=ChesterFirstDB-shard-0&authSource=admin&retryWrites=true'
+const url = process.env.DB_URL
 const db = monk(url);
 db.then(() => {
   console.log('connected to DB')
@@ -17,6 +17,8 @@ const cart = db.get('Cart');
 const users = db.get('Users');
 const secret = 'shh. dont tell im a secret';
 
+
+app.use(express.static('build'))
 app.use(headers)
 app.use(bodyParser.json())
 app.use(cookieParser())
@@ -98,7 +100,7 @@ app.get('/users', (req, res) => {
 })
 
 app.post('/login', (req, res) => {
-  users.findOne({username: req.body.username})
+  users.findOne({ username: req.body.username })
     .then(user => {
       let { password, ...userRed } = user
       if (req.body.password === password) {
@@ -115,23 +117,23 @@ app.post('/login', (req, res) => {
 app.post('/login/create', (req, res) => {
   if (req.body._id) {
     users.findOneAndUpdate(req.body._id, req.body)
-    .then(user => {
-      let { password, ...userRed } = user
-      res.send(userRed)
-    })
+      .then(user => {
+        let { password, ...userRed } = user
+        res.send(userRed)
+      })
   } else {
     users.insert(req.body)
-    .then(user => {
-      let { password, ...userRed } = user
-      res.send(userRed)
-    })
+      .then(user => {
+        let { password, ...userRed } = user
+        res.send(userRed)
+      })
   }
 })
 
 app.post('/login/users/password-reset', (req, res) => {
-  users.findOne({username: req.body.username})
+  users.findOne({ username: req.body.username })
     .then(user => {
-      if (user.username === "Admin") {res.send(401, "Cannot change root admin password")}
+      if (user.username === "Admin") { res.send(401, "Cannot change root admin password") }
       let tempUser = user
       tempUser.password = req.body.password
       users.findOneAndUpdate(user._id, tempUser)
