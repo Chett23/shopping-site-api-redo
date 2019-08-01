@@ -7,7 +7,7 @@ const monk = require('monk');
 const headers = require('./headers');
 
 const port = process.env.PORT || 8080
-const url = process.env.DB_URL
+const url = process.env.DB_URL || 'mongodb://admin:admin@chesterfirstdb-shard-00-00-i7cmi.mongodb.net:27017,chesterfirstdb-shard-00-01-i7cmi.mongodb.net:27017,chesterfirstdb-shard-00-02-i7cmi.mongodb.net:27017/Shopping-siteDB?ssl=true&replicaSet=ChesterFirstDB-shard-0&authSource=admin&retryWrites=true'
 const db = monk(url);
 db.then(() => {
   console.log('connected to DB')
@@ -28,7 +28,6 @@ app.get('/', (req, res) => {
 })
 
 app.get('/items', (req, res) => {
-  console.log('connected')
   items.find({})
     .then((result) => { 
       res.send(result) })
@@ -102,8 +101,10 @@ app.get('/users', (req, res) => {
 })
 
 app.post('/login', (req, res) => {
+  console.log(req.body.username)
   users.findOne({ username: req.body.username })
     .then(user => {
+      console.log(user)
       let { password, ...userRed } = user
       if (req.body.password === password) {
         res.send(userRed)
