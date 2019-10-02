@@ -6,8 +6,8 @@ const jwt = require('jsonwebtoken');
 const monk = require('monk');
 const headers = require('./headers');
 
-const port = process.env.PORT || 8080
-const url = process.env.DB_URL
+const port = process.env.PORT || 4000
+const url = process.env.DB_URL || 'mongodb://admin:admin@chesterfirstdb-shard-00-00-i7cmi.mongodb.net:27017,chesterfirstdb-shard-00-01-i7cmi.mongodb.net:27017,chesterfirstdb-shard-00-02-i7cmi.mongodb.net:27017/Shopping-siteDB?ssl=true&replicaSet=ChesterFirstDB-shard-0&authSource=admin&retryWrites=true'
 const db = monk(url);
 db.then(() => {
   console.log('connected to DB')
@@ -52,48 +52,30 @@ app.get('/cart', (req, res) => {
 })
 
 app.post('/cart', (req, res) => {
-  //managing qty in stock
-  items.findOne(req.body._id)
-    .then(item => {
-      if (item.stock <= 0) {
-        res.send(`Were sorry, but ${item.name} is no longer in stock`)
-      } else {
-        let item = req.body
-        item.stock = item.stock - 1
-        items.findOneAndUpdate(req.body._id, item)
-      }
-    })
-  //adding item to cart and managing qty in cart
-  cart.findOne(req.body._id)
-    .then((item) => {
-      if (item === null) {
-        req.body.qty = 1
-        req.body.stock--
-        cart.insert(req.body)
-      } else {
-        let tempQty = item.qty + 1
-        let tempStock = item.stock - 1
-        cart.update({ _id: req.body._id }, { $set: { qty: tempQty, stock: tempStock } })
-      }
-    }).then(result => {
-      res.send(result)
-    }).catch(err => {
-      res.send(err)
-    })
+  cart.insert({...req.body, qty: 1, }).then(() => res.send())
+})
+
+app.put('/cart/inc', (req, res) => {
+  cart.findOne(req.body._id).then(item => cart.findOneAndUpdate(item._id, {...item, qty: item.qty + 1}))
+  .then(() => {
+    items.findOne(req.body._id).then(item => items.findOneAndUpdate(item._id, {...item, stock: (item.stock - 1)}))
+    .then(() => res.send())
+  })
+})
+
+app.put('/cart/dec', (req, res) => {
+  cart.findOne(req.body._id).then(item => cart.findOneAndUpdate(item._id, {...item, qty: item.qty - 1}))
+  .then(() => {
+    items.findOne(req.body._id).then(item => items.findOneAndUpdate(item._id, {...item, stock: (item.stock + 1)}))
+    .then(() => res.send())
+  })
 })
 
 app.delete('/cart/:_id', (req, res) => {
-  cart.findOne(req.params._id)
-    .then((item) => {
-      if (item.qty === 1) {
-        cart.findOneAndDelete(item._id)
-      } else {
-        let tempQty = item.qty - 1
-        cart.update({ _id: req.params._id }, { $set: { qty: tempQty } })
-      }
-    }).then(result => {
+  cart.findOneAndDelete(req.params._id)
+    .then((result) => {
       res.send(result)
-    });
+    })
 });
 
 app.get('/users', (req, res) => {
